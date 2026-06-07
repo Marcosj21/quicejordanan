@@ -212,7 +212,7 @@ export default function AdminQuince() {
           <div style={{ background:'linear-gradient(135deg,#2D7A3A,#1A5026)', borderRadius:10, padding:'18px 20px', marginBottom:14, textAlign:'center' }}>
             <p style={{ fontFamily:'"Cinzel",serif', fontSize:10, letterSpacing:2, color:'rgba(255,255,255,.7)', marginBottom:4 }}>PERSONAS QUE ASISTIRÁN</p>
             <p style={{ fontFamily:'"Cinzel",serif', fontSize:44, color:'#fff', lineHeight:1 }}>{asistiran}</p>
-            <p style={{ fontSize:12, fontStyle:'italic', color:'rgba(255,255,255,.7)', marginTop:4 }}>👥 Para calcular platos y comida</p>
+            <p style={{ fontSize:12, fontStyle:'italic', color:'rgba(255,255,255,.7)', marginTop:4 }}>👥 Para calcular platos, bocaditos y recuerdos</p>
           </div>
 
           {/* ── 4 contadores de detalle ── */}
