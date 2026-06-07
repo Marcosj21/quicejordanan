@@ -2,19 +2,12 @@ import { useState, useEffect } from 'react'
 import Head from 'next/head'
 import { supabase } from '../lib/supabase'
 
-// ─────────────────────────────────────────────
-// La contraseña NUNCA está aquí.
-// Vive en ADMIN_PASSWORD en Vercel env vars.
-// Esta página llama a /api/admin-login que la lee
-// del servidor — el navegador nunca la ve.
-// ─────────────────────────────────────────────
-
 const MAX_ATTEMPTS = 5
 const LOCKOUT_MS   = 15 * 60 * 1000
 const SESSION_MS   = 4  * 60 * 60 * 1000
 
 export default function AdminQuince() {
-  const [screen, setScreen]   = useState('loading') // loading|login|locked|admin
+  const [screen, setScreen]   = useState('loading')
   const [pw, setPw]           = useState('')
   const [error, setError]     = useState('')
   const [attemptsLeft, setAttemptsLeft] = useState(MAX_ATTEMPTS)
@@ -23,21 +16,18 @@ export default function AdminQuince() {
   const [families, setFamilies]     = useState([])
   const [responses, setResponses]   = useState([])
   const [messages, setMessages]     = useState([])
-  const [loading, setLoading]       = useState(false)
   const [fName, setFName]           = useState('')
   const [fCount, setFCount]         = useState(2)
   const [members, setMembers]       = useState(['',''])
   const [createdLink, setCreatedLink] = useState(null)
   const [toast, setToast]     = useState('')
 
-  // ── session check on mount ──
   useEffect(() => {
     const sess = sessionStorage.getItem('_admin_sess')
     const rem  = isLockedOut()
     if (rem) { startLockoutTimer(rem); return }
     if (sess && Date.now() - parseInt(sess) < SESSION_MS) {
-      setScreen('admin')
-      loadAll()
+      setScreen('admin'); loadAll()
     } else {
       setScreen('login')
     }
@@ -72,7 +62,6 @@ export default function AdminQuince() {
   async function doLogin() {
     const rem = isLockedOut()
     if (rem) { startLockoutTimer(rem); return }
-
     setError('')
     try {
       const res = await fetch('/api/admin-login', {
@@ -83,9 +72,7 @@ export default function AdminQuince() {
       if (res.ok) {
         sessionStorage.setItem('_admin_sess', Date.now().toString())
         sessionStorage.setItem('_atm', JSON.stringify({n:0,t:0}))
-        setPw('')
-        setScreen('admin')
-        loadAll()
+        setPw(''); setScreen('admin'); loadAll()
       } else {
         const a = JSON.parse(sessionStorage.getItem('_atm') || '{"n":0,"t":0}')
         a.n++; a.t = Date.now()
@@ -107,7 +94,6 @@ export default function AdminQuince() {
     setFamilies([]); setResponses([])
   }
 
-  // ── data ──
   async function loadAll() {
     const [{ data: fam }, { data: resp }] = await Promise.all([
       supabase.from('families').select('*').order('created_at', { ascending: false }),
@@ -125,8 +111,7 @@ export default function AdminQuince() {
       supabase.from('families').delete().eq('key', key),
       supabase.from('responses').delete().eq('family_key', key)
     ])
-    showToast('Eliminada ✓')
-    loadAll()
+    showToast('Eliminada ✓'); loadAll()
   }
 
   async function createInvitation() {
@@ -136,27 +121,35 @@ export default function AdminQuince() {
     let key = fName.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').substring(0,30)
     const { data: ex } = await supabase.from('families').select('key').eq('key', key)
     if (ex?.length) key = key + '-' + Date.now().toString().slice(-4)
-    const { error } = await supabase.from('families').insert({ key, family_display: fName.trim(), admission_count: fCount, members: mems })
+    const { error } = await supabase.from('families').insert({ key, family_display: fName.trim(), admission_count: mems.length, members: mems })
     if (error) { showToast('Error al guardar'); return }
     const link = `${location.origin}/?f=${encodeURIComponent(key)}`
-    setCreatedLink({ link, name: fName.trim(), count: fCount })
+    setCreatedLink({ link, name: fName.trim(), count: mems.length })
     setFName(''); setFCount(2); setMembers(['',''])
-    showToast('¡Invitación creada! ✓')
-    loadAll()
+    showToast('¡Invitación creada! ✓'); loadAll()
   }
 
-  function showToast(msg) {
-    setToast(msg)
-    setTimeout(() => setToast(''), 2800)
-  }
+  function showToast(msg) { setToast(msg); setTimeout(() => setToast(''), 2800) }
 
-  // ── derived stats ──
+  // ── última respuesta por familia ──
   const respMap = {}
   responses.forEach(r => { if (!respMap[r.family_key]) respMap[r.family_key] = r })
-  const conf   = families.filter(f => respMap[f.key]?.status === 'confirmed').length
-  const decl   = families.filter(f => respMap[f.key]?.status === 'declined').length
-  const pend   = families.length - conf - decl
-  const totPer = families.filter(f => respMap[f.key]?.status === 'confirmed').reduce((s,f) => s + f.admission_count, 0)
+
+  // ── stats ──
+  const totalInvitaciones = families.length   // cuántas familias
+  let totalInvitados = 0, asistiran = 0, noAsistiran = 0, pendientes = 0
+  families.forEach(f => {
+    const mems = Array.isArray(f.members) ? f.members : JSON.parse(f.members||'[]')
+    totalInvitados += mems.length
+    const r = respMap[f.key]
+    if (!r) { pendientes += mems.length; return }
+    const att = r.attendees || {}
+    mems.forEach(m => {
+      if (att[m] === true) asistiran++
+      else if (att[m] === false) noAsistiran++
+      else pendientes++
+    })
+  })
 
   const inputStyle = { width:'100%', background:'rgba(200,212,220,.06)', border:'1px solid rgba(200,212,220,.18)', borderRadius:4, padding:'10px 12px', color:'#EBF1F6', fontFamily:'"Cormorant Garamond",serif', fontSize:15, outline:'none' }
   const labelStyle = { display:'block', fontFamily:'"Cinzel",serif', fontSize:9, letterSpacing:2, color:'rgba(200,212,220,.5)', marginBottom:6, textTransform:'uppercase' }
@@ -195,7 +188,6 @@ export default function AdminQuince() {
     <div style={{ minHeight:'100vh', background:'#08020E', fontFamily:'"Cormorant Garamond",serif', color:'#C8D4DC', paddingBottom:60 }}>
       <Head><title>Admin — Quince</title><meta name="robots" content="noindex"/></Head>
 
-      {/* Topbar */}
       <div style={{ background:'linear-gradient(90deg,#420D18,#6B1A2A,#420D18)', padding:'16px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid rgba(200,212,220,.15)', position:'sticky', top:0, zIndex:100 }}>
         <div>
           <p style={{ fontFamily:'"Cinzel",serif', fontSize:14, letterSpacing:4, color:'#EBF1F6' }}>✦ ADMIN QUINCE ✦</p>
@@ -204,7 +196,6 @@ export default function AdminQuince() {
         <button onClick={doLogout} style={{ fontFamily:'"Cinzel",serif', fontSize:9, letterSpacing:2, color:'rgba(200,212,220,.45)', background:'transparent', border:'1px solid rgba(200,212,220,.2)', borderRadius:20, padding:'6px 14px', cursor:'pointer', textTransform:'uppercase' }}>Salir</button>
       </div>
 
-      {/* Tabs */}
       <div style={{ display:'flex', maxWidth:680, margin:'20px auto 0', padding:'0 16px' }}>
         {['guests','create','messages'].map((t,i) => (
           <button key={t} onClick={()=>{ setTab(t); if(t!=='create') loadAll() }} style={{ flex:1, fontFamily:'"Cinzel",serif', fontSize:10, letterSpacing:2, padding:'11px 8px', textAlign:'center', cursor:'pointer', border:'1px solid rgba(200,212,220,.12)', background: tab===t ? 'linear-gradient(135deg,#6B1A2A,#420D18)' : '#1C0810', color: tab===t ? '#EBF1F6' : 'rgba(200,212,220,.4)', borderRadius: i===0?'4px 0 0 4px':i===2?'0 4px 4px 0':'0', textTransform:'uppercase' }}>
@@ -217,39 +208,67 @@ export default function AdminQuince() {
 
         {/* GUESTS TAB */}
         {tab === 'guests' && (<>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:18 }}>
+          {/* ── RESUMEN PRINCIPAL: lo que importa para la comida ── */}
+          <div style={{ background:'linear-gradient(135deg,#2D7A3A,#1A5026)', borderRadius:10, padding:'18px 20px', marginBottom:14, textAlign:'center' }}>
+            <p style={{ fontFamily:'"Cinzel",serif', fontSize:10, letterSpacing:2, color:'rgba(255,255,255,.7)', marginBottom:4 }}>PERSONAS QUE ASISTIRÁN</p>
+            <p style={{ fontFamily:'"Cinzel",serif', fontSize:44, color:'#fff', lineHeight:1 }}>{asistiran}</p>
+            <p style={{ fontSize:12, fontStyle:'italic', color:'rgba(255,255,255,.7)', marginTop:4 }}>👥 Para calcular platos y comida</p>
+          </div>
+
+          {/* ── 4 contadores de detalle ── */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8, marginBottom:18 }}>
             {[
-              { n: families.length, l: 'TOTAL' },
-              { n: `${conf}\n👥${totPer}`, l: 'ASISTIRÁN', c: '#70D080' },
-              { n: `${pend}\n${decl} no`, l: 'PENDIENTES', c: '#D4A840' }
+              { n: totalInvitaciones, l: 'INVITACIONES (familias)', c: '#EBF1F6' },
+              { n: totalInvitados,    l: 'INVITADOS (personas)',   c: '#EBF1F6' },
+              { n: noAsistiran,       l: 'NO ASISTIRÁN',           c: '#E08080' },
+              { n: pendientes,        l: 'PENDIENTES',             c: '#D4A840' }
             ].map((s,i) => (
               <div key={i} style={{ background:'#1C0810', border:'1px solid rgba(200,212,220,.1)', borderRadius:8, padding:14, textAlign:'center' }}>
-                <pre style={{ fontFamily:'"Cinzel",serif', fontSize:22, color: s.c||'#EBF1F6', margin:0, lineHeight:1.4 }}>{s.n}</pre>
-                <p style={{ fontSize:10, letterSpacing:1, color:'rgba(200,212,220,.4)', marginTop:3 }}>{s.l}</p>
+                <p style={{ fontFamily:'"Cinzel",serif', fontSize:26, color: s.c, margin:0 }}>{s.n}</p>
+                <p style={{ fontSize:9, letterSpacing:1, color:'rgba(200,212,220,.4)', marginTop:3 }}>{s.l}</p>
               </div>
             ))}
           </div>
+
           {families.length === 0
             ? <p style={{ textAlign:'center', padding:'40px 20px', fontStyle:'italic', color:'rgba(200,212,220,.35)' }}>Sin invitaciones aún. Crea la primera en "Crear".</p>
             : families.map(f => {
                 const resp  = respMap[f.key]
-                const status = resp ? resp.status : 'pending'
                 const mems  = Array.isArray(f.members) ? f.members : JSON.parse(f.members||'[]')
+                const att   = resp?.attendees || null
                 const link  = `${location.origin}/?f=${encodeURIComponent(f.key)}`
-                const badge = status==='confirmed' ? { bg:'rgba(30,120,50,.25)', border:'rgba(40,180,70,.3)', color:'#70D080', txt:'✓ ASISTIRÁ' }
-                            : status==='declined'  ? { bg:'rgba(180,30,30,.2)',  border:'rgba(220,60,60,.25)', color:'#E08080', txt:'✕ NO ASISTIRÁ' }
-                            :                       { bg:'rgba(180,120,20,.15)', border:'rgba(200,150,30,.25)', color:'#D4A840', txt:'PENDIENTE' }
+                const nYes  = att ? mems.filter(m=>att[m]===true).length : 0
+                const answered = !!resp
+
+                const badge = !answered ? { bg:'rgba(180,120,20,.15)', border:'rgba(200,150,30,.25)', color:'#D4A840', txt:'PENDIENTE' }
+                            : nYes > 0  ? { bg:'rgba(30,120,50,.25)', border:'rgba(40,180,70,.3)', color:'#70D080', txt:`✓ ${nYes} DE ${mems.length}` }
+                            :             { bg:'rgba(180,30,30,.2)',  border:'rgba(220,60,60,.25)', color:'#E08080', txt:'✕ NINGUNO' }
                 return (
                   <div key={f.key} style={{ background:'#1C0810', border:'1px solid rgba(200,212,220,.1)', borderRadius:8, padding:'16px 18px', marginBottom:10 }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:6 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:8 }}>
                       <div>
                         <p style={{ fontFamily:'"Cinzel",serif', fontSize:13, letterSpacing:2, color:'#EBF1F6' }}>{f.family_display}</p>
-                        <p style={{ fontSize:12, color:'rgba(200,212,220,.45)', marginTop:2 }}>{f.admission_count} persona{f.admission_count!==1?'s':''}</p>
+                        <p style={{ fontSize:12, color:'rgba(200,212,220,.45)', marginTop:2 }}>{mems.length} persona{mems.length!==1?'s':''}</p>
                       </div>
                       <span style={{ fontFamily:'"Cinzel",serif', fontSize:9, letterSpacing:2, padding:'4px 12px', borderRadius:20, background:badge.bg, border:`1px solid ${badge.border}`, color:badge.color, flexShrink:0 }}>{badge.txt}</span>
                     </div>
-                    <p style={{ fontSize:12, fontStyle:'italic', color:'rgba(200,212,220,.45)', marginBottom:8 }}>{mems.join(' · ')}</p>
-                    {resp && <p style={{ fontSize:11, color:'rgba(200,212,220,.3)', marginBottom:6, fontStyle:'italic' }}>{status==='confirmed'?'Confirmó':'Rechazó'} · {new Date(resp.responded_at).toLocaleString('es-EC')}</p>}
+
+                    {/* detalle por persona */}
+                    <div style={{ marginBottom:8 }}>
+                      {mems.map((m,i)=>{
+                        const st = att ? att[m] : undefined
+                        const mark = st===true ? <span style={{color:'#70D080'}}>✓</span>
+                                   : st===false ? <span style={{color:'#E08080'}}>✕</span>
+                                   : <span style={{color:'rgba(200,212,220,.3)'}}>○</span>
+                        return (
+                          <p key={i} style={{ fontSize:13, color:'rgba(200,212,220,.65)', padding:'3px 0', display:'flex', gap:8 }}>
+                            {mark} {m}
+                          </p>
+                        )
+                      })}
+                    </div>
+
+                    {resp && <p style={{ fontSize:11, color:'rgba(200,212,220,.3)', marginBottom:6, fontStyle:'italic' }}>Respondió · {new Date(resp.responded_at).toLocaleString('es-EC')}</p>}
                     <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                       <div onClick={()=>navigator.clipboard.writeText(link).then(()=>showToast('Copiado ✓'))} style={{ flex:1, fontFamily:'"Cinzel",serif', fontSize:9, color:'rgba(200,212,220,.4)', background:'rgba(200,212,220,.04)', border:'1px solid rgba(200,212,220,.1)', borderRadius:4, padding:'6px 10px', wordBreak:'break-all', cursor:'pointer' }}>{link}</div>
                       <button onClick={()=>navigator.clipboard.writeText(link).then(()=>showToast('Copiado ✓'))} style={{ background:'rgba(200,212,220,.07)', border:'1px solid rgba(200,212,220,.14)', borderRadius:4, padding:'6px 10px', cursor:'pointer', fontSize:14 }}>📋</button>
@@ -318,7 +337,6 @@ export default function AdminQuince() {
         )}
       </div>
 
-      {/* Toast */}
       {toast && (
         <div style={{ position:'fixed', bottom:26, left:'50%', transform:'translateX(-50%)', background:'linear-gradient(135deg,#6B1A2A,#420D18)', color:'#EBF1F6', fontFamily:'"Cinzel",serif', fontSize:10, letterSpacing:2, padding:'10px 24px', borderRadius:30, boxShadow:'0 8px 30px rgba(0,0,0,.5)', zIndex:9999, whiteSpace:'nowrap' }}>
           {toast}

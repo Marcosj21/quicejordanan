@@ -11,13 +11,12 @@ export default function Home() {
   const [stage, setStage] = useState('envelope')
   const [family, setFamily] = useState(null)
   const [shaking, setShaking] = useState(false)
-  const [responded, setResponded] = useState(null)   // respuesta ya guardada
+  const [responded, setResponded] = useState(null)
   const [panel, setPanel] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [confirmModal, setConfirmModal] = useState(false)  // aviso de "no asistirán"
+  const [confirmModal, setConfirmModal] = useState(false)
   const flashRef = useRef()
 
-  // selección por persona: { "Marcos Salazar": true, "Andrea Salazar": false, ... }
   const [choices, setChoices] = useState({})
 
   useEffect(() => {
@@ -27,7 +26,6 @@ export default function Home() {
       .then(async ({ data }) => {
         if (!data) return
         setFamily(data)
-        // inicializa todos en "sí va" por defecto
         const mems = Array.isArray(data.members) ? data.members : JSON.parse(data.members || '[]')
         const init = {}; mems.forEach(m => { init[m] = true })
         setChoices(init)
@@ -50,10 +48,9 @@ export default function Home() {
   }
 
   const members = Array.isArray(family?.members) ? family.members : JSON.parse(family?.members || '[]')
-  const yes = members.filter(m => choices[m])      // los que sí van
-  const no  = members.filter(m => !choices[m])     // los que no van
+  const yes = members.filter(m => choices[m])
+  const no  = members.filter(m => !choices[m])
 
-  // al pulsar Confirmar: si hay alguien que NO va, mostramos aviso; si no, guardamos directo
   function onConfirmClick() {
     if (loading) return
     if (no.length > 0) { setConfirmModal(true); return }
@@ -75,7 +72,6 @@ export default function Home() {
     setLoading(false)
   }
 
-  // lista de nombres ya guardada (cuando ya respondieron antes)
   const savedAtt = responded?.attendees || null
   const savedYes = savedAtt ? Object.keys(savedAtt).filter(k => savedAtt[k]) : []
 
@@ -86,12 +82,6 @@ export default function Home() {
       ? { color:'#160508', background:'linear-gradient(135deg,#EBF1F6 0%,#D0DCE8 18%,#F0F5F8 45%,#C0CCDA 72%,#E0EAF2 100%)', boxShadow:'0 6px 24px rgba(0,0,0,.45)' }
       : { color:'rgba(200,212,220,.82)', background:'rgba(200,212,220,.04)', border:'1px solid rgba(200,212,220,.28)' })
   })
-
-  function nameList(arr) {
-    if (arr.length === 0) return ''
-    if (arr.length === 1) return arr[0]
-    return arr.slice(0,-1).join(', ') + ' y ' + arr[arr.length-1]
-  }
 
   return (
     <>
@@ -120,13 +110,24 @@ export default function Home() {
           style={{position:'fixed',inset:0,background:'rgba(0,0,0,.75)',zIndex:800,display:'flex',alignItems:'center',justifyContent:'center',padding:20,backdropFilter:'blur(4px)'}}>
           <div style={{background:'linear-gradient(158deg,#F9F2EA,#EFE5D6)',borderRadius:20,padding:'32px 28px',width:'100%',maxWidth:380,textAlign:'center',animation:'modalIn .4s cubic-bezier(.34,1.56,.64,1)',boxShadow:'0 30px 80px rgba(0,0,0,.6)'}}>
             <div style={{fontSize:48,marginBottom:12}}>🤔</div>
-            <p style={{fontFamily:'"Cinzel",serif',fontSize:13,letterSpacing:2,color:'#6B1A2A',marginBottom:10}}>Confirmar</p>
-            <p style={{fontSize:15,fontStyle:'italic',color:'#3D0A14',lineHeight:1.8,marginBottom:20}}>
-              {no.length === 1
-                ? <>¿Seguro que <strong>{nameList(no)}</strong> no asistirá?</>
-                : <>¿Seguro que <strong>{nameList(no)}</strong> no asistirán?</>}
-              {yes.length > 0 && <><br/><br/>Asistirán: <strong>{nameList(yes)}</strong></>}
+            <p style={{fontFamily:'"Cinzel",serif',fontSize:13,letterSpacing:2,color:'#6B1A2A',marginBottom:12}}>Confirmar</p>
+            <p style={{fontSize:14,fontStyle:'italic',color:'#3D0A14',lineHeight:1.6,marginBottom:10}}>
+              {no.length === 1 ? '¿Seguro que no asistirá?' : '¿Seguro que no asistirán?'}
             </p>
+            {/* lista vertical de los que NO van */}
+            <div style={{marginBottom:16}}>
+              {no.map((n,i)=>(
+                <p key={i} style={{fontSize:15,color:'#7A2A2A',fontWeight:600,padding:'2px 0'}}>✕ {n}</p>
+              ))}
+            </div>
+            {yes.length > 0 && (<>
+              <p style={{fontSize:12,fontStyle:'italic',color:'#8B5555',marginBottom:6}}>Asistirán:</p>
+              <div style={{marginBottom:18}}>
+                {yes.map((n,i)=>(
+                  <p key={i} style={{fontSize:14,color:'#2D7A3A',padding:'2px 0'}}>✓ {n}</p>
+                ))}
+              </div>
+            </>)}
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
               <button onClick={save} style={{fontFamily:'"Cinzel",serif',fontSize:11,letterSpacing:3,color:'#fff',padding:'13px 20px',border:'none',borderRadius:50,background:'linear-gradient(135deg,#7A1A2A,#420D18)',cursor:'pointer'}}>Sí, confirmar</button>
               <button onClick={()=>setConfirmModal(false)} style={{fontFamily:'"Cinzel",serif',fontSize:11,letterSpacing:3,color:'#6B1A2A',padding:'12px 20px',border:'1px solid rgba(107,26,42,.3)',borderRadius:50,background:'transparent',cursor:'pointer'}}>Cerrar</button>
@@ -185,7 +186,6 @@ export default function Home() {
 
               {!responded ? (<>
                 <p style={{fontSize:13,fontStyle:'italic',color:'#8B5555',textAlign:'center',marginBottom:14}}>Marca quién podrá acompañarnos:</p>
-                {/* lista por persona con ✓ / ✗ */}
                 <div style={{marginBottom:16}}>
                   {members.map((m,i)=>(
                     <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'10px 4px',borderBottom:'1px solid rgba(107,26,42,.09)'}}>
@@ -207,10 +207,16 @@ export default function Home() {
                 </div>
                 <button onClick={onConfirmClick} disabled={loading} style={{fontFamily:'"Cinzel",serif',fontSize:11,letterSpacing:3,color:'#fff',padding:'15px 24px',border:'none',borderRadius:50,background:'linear-gradient(135deg,#6B1A2A,#420D18)',cursor:'pointer',width:'100%'}}>✦ &nbsp;Confirmar Asistencia &nbsp;✦</button>
               </>) : savedYes.length > 0 ? (
-                <div style={{textAlign:'center',padding:'18px 14px',borderRadius:14,background:'rgba(45,122,58,.08)',border:'1px solid rgba(45,122,58,.2)'}}>
+                <div style={{textAlign:'center',padding:'22px 16px',borderRadius:14,background:'rgba(45,122,58,.08)',border:'1px solid rgba(45,122,58,.2)'}}>
                   <div style={{fontSize:36,marginBottom:8}}>🎉</div>
-                  <p style={{fontFamily:'"Cinzel",serif',fontSize:12,letterSpacing:3,color:'#2D7A3A',marginBottom:6}}>¡LOS ESPERAMOS!</p>
-                  <p style={{fontSize:15,fontStyle:'italic',color:'#1A5026',lineHeight:1.8}}>{nameList(savedYes)}<br/>¡Nos vemos el Sábado 13 de Junio!</p>
+                  <p style={{fontFamily:'"Cinzel",serif',fontSize:12,letterSpacing:3,color:'#2D7A3A',marginBottom:14}}>¡LOS ESPERAMOS!</p>
+                  {/* nombres en LISTA, uno debajo del otro */}
+                  <div style={{marginBottom:14}}>
+                    {savedYes.map((n,i)=>(
+                      <p key={i} style={{fontSize:16,color:'#1A5026',padding:'4px 0'}}>{n}</p>
+                    ))}
+                  </div>
+                  <p style={{fontSize:14,fontStyle:'italic',color:'#1A5026'}}>¡Nos vemos el Sábado 13 de Junio!</p>
                 </div>
               ) : (
                 <div style={{textAlign:'center',padding:'18px 14px',borderRadius:14,background:'rgba(107,26,42,.07)',border:'1px solid rgba(107,26,42,.15)'}}>
