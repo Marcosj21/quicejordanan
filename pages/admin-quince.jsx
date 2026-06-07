@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 const MAX_ATTEMPTS = 5
 const LOCKOUT_MS   = 15 * 60 * 1000
 const SESSION_MS   = 4  * 60 * 60 * 1000
+const MAX_PERSONAS = 6   // máximo de personas por invitación
 
 export default function AdminQuince() {
   const [screen, setScreen]   = useState('loading')
@@ -114,9 +115,16 @@ export default function AdminQuince() {
     showToast('Eliminada ✓'); loadAll()
   }
 
+  // ── Cambiar la cantidad de personas con los botones 1-6 ──
+  function setPersonCount(n) {
+    setFCount(n)
+    // Ajustar el arreglo de nombres: conservar los que ya escribió
+    setMembers(prev => Array.from({ length: n }, (_, i) => prev[i] || ''))
+  }
+
   async function createInvitation() {
     if (!fName.trim()) { showToast('Escribe el nombre'); return }
-    const mems = members.filter(m => m.trim())
+    const mems = members.slice(0, fCount).filter(m => m.trim())
     if (!mems.length) { showToast('Agrega al menos un nombre'); return }
     let key = fName.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').substring(0,30)
     const { data: ex } = await supabase.from('families').select('key').eq('key', key)
@@ -125,7 +133,7 @@ export default function AdminQuince() {
     if (error) { showToast('Error al guardar'); return }
     const link = `${location.origin}/?f=${encodeURIComponent(key)}`
     setCreatedLink({ link, name: fName.trim(), count: mems.length })
-    setFName(''); setFCount(2); setMembers(['',''])
+    setFName(''); setPersonCount(2)
     showToast('¡Invitación creada! ✓'); loadAll()
   }
 
@@ -136,7 +144,7 @@ export default function AdminQuince() {
   responses.forEach(r => { if (!respMap[r.family_key]) respMap[r.family_key] = r })
 
   // ── stats ──
-  const totalInvitaciones = families.length   // cuántas familias
+  const totalInvitaciones = families.length
   let totalInvitados = 0, asistiran = 0, noAsistiran = 0, pendientes = 0
   families.forEach(f => {
     const mems = Array.isArray(f.members) ? f.members : JSON.parse(f.members||'[]')
@@ -208,14 +216,12 @@ export default function AdminQuince() {
 
         {/* GUESTS TAB */}
         {tab === 'guests' && (<>
-          {/* ── RESUMEN PRINCIPAL: lo que importa para la comida ── */}
           <div style={{ background:'linear-gradient(135deg,#2D7A3A,#1A5026)', borderRadius:10, padding:'18px 20px', marginBottom:14, textAlign:'center' }}>
             <p style={{ fontFamily:'"Cinzel",serif', fontSize:10, letterSpacing:2, color:'rgba(255,255,255,.7)', marginBottom:4 }}>PERSONAS QUE ASISTIRÁN</p>
             <p style={{ fontFamily:'"Cinzel",serif', fontSize:44, color:'#fff', lineHeight:1 }}>{asistiran}</p>
             <p style={{ fontSize:12, fontStyle:'italic', color:'rgba(255,255,255,.7)', marginTop:4 }}>👥 Para calcular platos, bocaditos y recuerdos</p>
           </div>
 
-          {/* ── 4 contadores de detalle ── */}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8, marginBottom:18 }}>
             {[
               { n: totalInvitaciones, l: 'INVITACIONES (familias)', c: '#EBF1F6' },
@@ -253,7 +259,6 @@ export default function AdminQuince() {
                       <span style={{ fontFamily:'"Cinzel",serif', fontSize:9, letterSpacing:2, padding:'4px 12px', borderRadius:20, background:badge.bg, border:`1px solid ${badge.border}`, color:badge.color, flexShrink:0 }}>{badge.txt}</span>
                     </div>
 
-                    {/* detalle por persona */}
                     <div style={{ marginBottom:8 }}>
                       {mems.map((m,i)=>{
                         const st = att ? att[m] : undefined
@@ -286,27 +291,63 @@ export default function AdminQuince() {
         {tab === 'create' && (
           <div style={{ background:'#1C0810', border:'1px solid rgba(200,212,220,.12)', borderRadius:8, padding:'24px 20px' }}>
             <p style={{ fontFamily:'"Cinzel",serif', fontSize:13, letterSpacing:3, color:'#EBF1F6', marginBottom:18, borderBottom:'1px solid rgba(200,212,220,.1)', paddingBottom:11 }}>✦ Nueva Invitación</p>
-            <div style={{ marginBottom:15 }}>
+
+            <div style={{ marginBottom:18 }}>
               <label style={labelStyle}>Nombre de la familia</label>
               <input value={fName} onChange={e=>setFName(e.target.value)} placeholder="Ej: Familia Torres Ríos" style={inputStyle}/>
             </div>
-            <div style={{ display:'flex', gap:10, alignItems:'flex-end', marginBottom:14 }}>
-              <div style={{ flex:1 }}>
-                <label style={labelStyle}>Cantidad de personas</label>
-                <input type="number" min={1} max={10} value={fCount} onChange={e=>{ const n=Math.max(1,Math.min(10,parseInt(e.target.value)||1)); setFCount(n); setMembers(Array(n).fill('').map((_,i)=>members[i]||'')) }} style={inputStyle}/>
+
+            {/* ── SELECTOR DE CANTIDAD CON BOTONES 1-6 ── */}
+            <div style={{ marginBottom:18 }}>
+              <label style={labelStyle}>¿Cuántas personas?</label>
+              <div style={{ display:'grid', gridTemplateColumns:`repeat(${MAX_PERSONAS},1fr)`, gap:7 }}>
+                {Array.from({ length: MAX_PERSONAS }, (_, i) => i + 1).map(n => {
+                  const activo = fCount === n
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setPersonCount(n)}
+                      style={{
+                        fontFamily:'"Cinzel",serif',
+                        fontSize:18,
+                        padding:'14px 0',
+                        cursor:'pointer',
+                        borderRadius:8,
+                        border: activo ? '1px solid rgba(40,180,70,.5)' : '1px solid rgba(200,212,220,.18)',
+                        background: activo ? 'linear-gradient(135deg,#2D7A3A,#1A5026)' : 'rgba(200,212,220,.05)',
+                        color: activo ? '#fff' : 'rgba(200,212,220,.6)',
+                        fontWeight: activo ? 700 : 400,
+                        transition:'all .15s'
+                      }}
+                    >
+                      {n}
+                    </button>
+                  )
+                })}
               </div>
-              <button onClick={()=>setMembers(Array(fCount).fill('').map((_,i)=>members[i]||''))} style={{ fontFamily:'"Cinzel",serif', fontSize:9, letterSpacing:2, color:'rgba(200,212,220,.5)', background:'rgba(200,212,220,.07)', border:'1px solid rgba(200,212,220,.18)', borderRadius:4, padding:'10px 12px', cursor:'pointer', height:40, whiteSpace:'nowrap' }}>↺ Actualizar</button>
+              <p style={{ fontSize:12, fontStyle:'italic', color:'rgba(200,212,220,.4)', marginTop:8, textAlign:'center' }}>
+                Toca el número de personas de esta familia
+              </p>
             </div>
-            <div style={{ marginBottom:15 }}>
+
+            {/* ── LISTADO DE NOMBRES SEGÚN LA CANTIDAD ── */}
+            <div style={{ marginBottom:18 }}>
               <label style={labelStyle}>Nombre de cada invitado</label>
-              {Array.from({length:fCount},(_,i)=>(
-                <div key={i} style={{ display:'flex', gap:8, alignItems:'center', marginBottom:7 }}>
-                  <span style={{ fontFamily:'"Cinzel",serif', fontSize:10, color:'rgba(200,212,220,.35)', width:18, textAlign:'center', flexShrink:0 }}>{i+1}</span>
-                  <input value={members[i]||''} onChange={e=>{ const m=[...members]; m[i]=e.target.value; setMembers(m) }} placeholder={`Nombre ${i+1}`} style={{...inputStyle, flex:1}}/>
+              {Array.from({ length: fCount }, (_, i) => (
+                <div key={i} style={{ display:'flex', gap:8, alignItems:'center', marginBottom:8 }}>
+                  <span style={{ fontFamily:'"Cinzel",serif', fontSize:12, color:'rgba(200,212,220,.45)', width:22, height:22, lineHeight:'22px', textAlign:'center', flexShrink:0, borderRadius:'50%', background:'rgba(200,212,220,.08)' }}>{i+1}</span>
+                  <input
+                    value={members[i] || ''}
+                    onChange={e=>{ const m=[...members]; m[i]=e.target.value; setMembers(m) }}
+                    placeholder={`Nombre de la persona ${i+1}`}
+                    style={{...inputStyle, flex:1}}
+                  />
                 </div>
               ))}
             </div>
-            <button onClick={createInvitation} style={{ fontFamily:'"Cinzel",serif', fontSize:10, letterSpacing:3, color:'#fff', padding:'13px 24px', border:'none', borderRadius:4, background:'linear-gradient(135deg,#6B1A2A,#420D18)', cursor:'pointer', width:'100%', textTransform:'uppercase' }}>✦ Crear Invitación</button>
+
+            <button onClick={createInvitation} style={{ fontFamily:'"Cinzel",serif', fontSize:10, letterSpacing:3, color:'#fff', padding:'14px 24px', border:'none', borderRadius:6, background:'linear-gradient(135deg,#6B1A2A,#420D18)', cursor:'pointer', width:'100%', textTransform:'uppercase' }}>✦ Crear Invitación</button>
 
             {createdLink && (
               <div style={{ marginTop:14, background:'rgba(40,120,60,.1)', border:'1px solid rgba(40,180,70,.18)', borderRadius:8, padding:18 }}>
